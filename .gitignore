@@ -5,6 +5,7 @@ __pycache__/
 example/.project
 example/.pydevproject
 .DS_Store
+.streamlit
 
 # kbc datafolder
 data/
