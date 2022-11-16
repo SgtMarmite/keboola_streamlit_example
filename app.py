@@ -12,10 +12,10 @@ st.markdown('''
 
 # Adds a table selection form to the sidebar of streamlit
 add_keboola_table_selection()
-if "extracted_file" not in st.session_state:
-    st.subheader('Interactive Table')
-    st.write(
-        "This is a simple table app that uses the Keboola Storage API to get the data from the selected table."
-    )
-if "extracted_file" in st.session_state:
+
+st.subheader('Interactive Table')
+st.write(
+    "This is a simple table app that uses the Keboola Storage API to get the data from the selected table."
+)
+if "uploaded_file" in st.session_state:
     interactive_table()

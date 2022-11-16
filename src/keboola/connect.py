@@ -1,10 +1,9 @@
 import streamlit as st
 import os
-import requests
 from requests.exceptions import HTTPError
-import wget
-import tarfile
-import glob
+from typing import Dict, List, Tuple
+
+from kbcstorage.client import Client
 
 KBC_URLS = ['https://connection.keboola.com/',
             'https://connection.north-europe.azure.keboola.com/',
@@ -23,17 +22,16 @@ def add_keboola_table_selection():
 
     """
     _add_connection_form()
-    if 'artifacts' in st.session_state:
-        _add_timestamp_form()
-    if 'selected_timestamp' in st.session_state:
-        _get_table()
+    if "kbc_storage_client" in st.session_state:
+        _add_bucket_form()
+    if "selected_bucket" in st.session_state and "kbc_storage_client" in st.session_state:
+        _add_table_form()
 
 
 def _add_connection_form():
     with st.sidebar.form("Connection Details"):
         connection_url = st.selectbox('Connection URL', KBC_URLS)
         api_key = st.text_input('API Token', 'Enter Password', type="password")
-        st.session_state["api_key"] = api_key
         if st.form_submit_button("Connect"):
 
             # Reset Client
@@ -50,59 +48,58 @@ def _add_connection_form():
             if "uploaded_file" in st.session_state:
                 st.session_state.pop("uploaded_file")
 
-            api_url = connection_url + "v2/storage/files/"
-            params = {"tags[]": "artifact"}
-            headers = {"X-StorageApi-Token": api_key}
-            if r := _get_list_of_artifacts(api_url, params, headers):
-                st.session_state['artifacts'] = r
+            kbc_client = Client(connection_url, api_key)
+            if _get_bucket_list(kbc_client):
+                st.session_state['kbc_storage_client'] = kbc_client
+                st.session_state['bucket_list'] = _get_bucket_list(kbc_client)
 
 
-def _add_timestamp_form():
-    with st.sidebar.form("Run Details"):
-        with st.header('Select the run timestamp'):
-            ts = st.selectbox('Timestamp', _get_artifact_details())
-        if st.form_submit_button("Select Run Timestamp"):
-            st.session_state['selected_timestamp'] = ts
+def _add_bucket_form():
+    with st.sidebar.form("Bucket Details"):
+        with st.header('Select a bucket from storage'):
+            bucket = st.selectbox('Bucket', _get_buckets_from_bucket_list())
+        if st.form_submit_button("Select Bucket"):
+            st.session_state['selected_bucket'] = bucket
 
 
-def _get_list_of_artifacts(api_url, params, headers):
+def _add_table_form():
+    with st.sidebar.form("Table Details"):
+        table_names, tables = _get_tables(st.session_state['selected_bucket'])
+        st.session_state['selected_table'] = st.selectbox('Table', table_names)
+        st.session_state['selected_table_id'] = tables[st.session_state['selected_table']]["id"]
+        if st.form_submit_button("Select table"):
+            data_dir = "data"
+            st.session_state['kbc_storage_client'].tables.export_to_file(
+                table_id=st.session_state['selected_table_id'],
+                path_name=data_dir)
+            st.session_state['uploaded_file'] = os.path.join(data_dir, st.session_state['selected_table'])
+
+
+def _get_bucket_list(kbc_storage_client):
     try:
-        r = requests.get(api_url, params=params, headers=headers)
-        return r.json()
+        project_bucket_list = kbc_storage_client.buckets.list()
+        return project_bucket_list
     except HTTPError:
         st.error("Invalid Connection settings")
 
 
-def _get_artifact_details():
+def _get_buckets_from_bucket_list():
     """
     This function is used to get the list of buckets from Keboola Storage.
     """
     try:
-        return [x['created'] for x in st.session_state['artifacts']]
+        return [bucket['id'] for bucket in st.session_state['bucket_list']]
     except Exception:
         st.error('Could not list buckets')
 
 
-def _get_table():
-    download_path = os.path.join(os.getcwd(), "download")
-    if not os.path.exists(download_path):
-        os.makedirs(download_path)
-    else:
-        files = glob.glob(f'{download_path}/*')
-        for f in files:
-            os.remove(f)
-
-    artifacts = st.session_state["artifacts"]
-    ts = st.session_state["selected_timestamp"]
-
-    artifact_info = [x for x in artifacts if x["created"] == ts][0]
-
-    download_url = artifact_info["url"]
-    filepath = os.path.join(download_path, str(artifact_info["name"]))
-    wget.download(download_url, filepath)
-
-    with tarfile.open(filepath) as file:
-        file.extractall('.')
-
-    st.session_state['extracted_file'] = os.path.join(os.getcwd(), "benchmark.csv")
-    print(f"table downloaded: {st.session_state['extracted_file']}")
+def _get_tables(bucket_id: str) -> Tuple[List, Dict]:
+    try:
+        tables = {}
+        for table in st.session_state['kbc_storage_client'].buckets.list_tables(bucket_id):
+            tables[table['name']] = table
+        table_names = list(tables.keys())
+        return table_names, tables
+    except Exception as e:
+        st.error('Could not list tables')
+        st.error(e)
