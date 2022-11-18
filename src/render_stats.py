@@ -14,7 +14,7 @@ def convert_size(size_bytes):
     return "%s %s" % (s, size_name[i])
 
 
-def interactive_table():
+def render_stats():
     query_df = pd.read_csv(st.session_state['extracted_file'])
     query_df['time'] = pd.to_datetime(query_df['time'], unit='s')
 

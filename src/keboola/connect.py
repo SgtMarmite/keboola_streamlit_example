@@ -60,9 +60,16 @@ def _add_connection_form():
 def _add_timestamp_form():
     with st.sidebar.form("Run Details"):
         with st.header('Select the run timestamp'):
-            ts = st.selectbox('Timestamp', _get_artifact_details())
+            try:
+                list_of_timestamps = _get_artifact_details()
+                ts = st.selectbox('Timestamp', list_of_timestamps)
+            except TypeError:
+                st.write("Cannot connect to selected source. Check your Connection URL and API Token.")
         if st.form_submit_button("Select Run Timestamp"):
-            st.session_state['selected_timestamp'] = ts
+            try:
+                st.session_state['selected_timestamp'] = ts
+            except UnboundLocalError:
+                pass
 
 
 def _get_list_of_artifacts(api_url, params, headers):
